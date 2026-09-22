@@ -1,0 +1,32 @@
+import torch
+import cv2
+import numpy as np
+from sam2.build_sam import build_sam2
+from sam2.sam2_image_predictor import SAM2ImagePredictor
+
+# 1. Initialize device and configuration
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+sam2_checkpoint = "checkpoints/sam2_hiera_base_plus.pt"
+model_cfg = "configs/sam2/sam2_hiera_b+.yaml" # Path inside cloned repo
+
+# 2. Build model and predictor
+sam2_model = build_sam2(model_cfg, sam2_checkpoint, device=device)
+predictor = SAM2ImagePredictor(sam2_model)
+
+# 3. Load an image and set it in the predictor
+image = cv2.imread("your_image.jpg")
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+predictor.set_image(image)
+
+# 4. Define a prompt coordinate [X, Y] and label (1 = Foreground object)
+input_points = np.array([[250, 300]], dtype=np.float32)
+input_labels = np.array([1], dtype=np.int32)
+
+# 5. Run inference
+masks, scores, logits = predictor.predict(
+    point_coords=input_points,
+    point_labels=input_labels,
+    multimask_output=False  # Returns the single highest-confidence mask
+)
+
+print(f"Mask generation complete. Generated mask shape: {masks[0].shape}")
