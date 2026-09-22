@@ -1,0 +1,40 @@
+import torch
+import cv2
+import os
+from sam2.build_sam import build_sam2_video_predictor
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+sam2_checkpoint = "checkpoints/sam2_hiera_base_plus.pt"
+model_cfg = "configs/sam2/sam2_hiera_b+.yaml"
+
+# Initialize the video tracking predictor
+predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint, device=device)
+
+# Path pointing to a directory filled with ordered JPEG frames (e.g., frame_001.jpg)
+video_dir = "path/to/extracted_video_frames"
+
+# 1. Initialize the internal memory tracking state for this specific video
+inference_state = predictor.init_state(video_path=video_dir)
+
+# 2. Add a point prompt to Frame 0 to lock onto an object
+ann_frame_idx = 0   # The frame we are pointing at
+ann_obj_id = 1      # Assign a unique tracking ID to this specific object
+points = torch.tensor([[120, 450]], dtype=torch.float32) # [X, Y]
+labels = torch.tensor([1], dtype=torch.int32)            # 1 = Foreground
+
+_, out_obj_ids, out_mask_logits = predictor.add_new_points_or_labels(
+    inference_state=inference_state,
+    frame_idx=ann_frame_idx,
+    obj_id=ann_obj_id,
+    points=points,
+    labels=labels,
+)
+
+# 3. Propagate the mask forward throughout the rest of the video frames
+for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
+    # 'out_mask_logits' contains the predicted tracking masks for each frame
+    # A logit value > 0 indicates the tracked object mask
+    print(f"Propagated tracking to frame {out_frame_idx}")
+
+# 4. Clean up state when finished
+predictor.reset_state(inference_state)
